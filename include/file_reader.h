@@ -7,7 +7,6 @@ class FileReader {
    public:
     std::string readFile(const std::string& path);
     std::vector<std::string> listDirectories(const std::string& path);
-    bool exists(const std::string& path);
 };
 
 #endif
