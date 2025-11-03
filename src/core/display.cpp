@@ -1,9 +1,13 @@
 #include "../../include/display.h"
 
 #include <algorithm>
+#include <ftxui/component/component.hpp>
+#include <ftxui/component/screen_interactive.hpp>
+#include <ftxui/dom/node.hpp>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
+#include <string>
 
 void Display::clear_screen() { std::cout << "\033[2J\033[1;1H"; }
 
@@ -61,36 +65,68 @@ std::string Display::get_state_name(const std::string& state) {
 }
 
 void Display::render(const std::vector<Process>& processes) {
-    this->clear_screen();
+    using namespace ftxui;
 
-    std::cout << "PROCESS MANAGER\n";
-    std::cout
-        << "================================================================\n";
-    std::cout << std::left << std::setw(8) << "PID" << std::setw(26)
-              << "PROGRAM" << std::setw(10) << "CPU%" << std::setw(12)
-              << "MEMORY(MB)" << std::setw(10) << "STATE"
-              << "\n";
-    std::cout
-        << "================================================================\n";
+    auto screen = ScreenInteractive::FitComponent();
 
-    // sort by cpu usage
-    std::vector<Process> sorted = processes;
-    std::sort(sorted.begin(), sorted.end(),
-              [](const Process& a, const Process& b) {
-                  return a.cpu_usage > b.cpu_usage;
-              });
+    int selected = 0;
+    // to show info about highlighted process
+    bool show_info = false;
 
-    // show first 25
-    int count = 0;
-    for (const auto& proc : sorted) {
-        if (count++ >= 25) break;
+    auto table_renderer = Renderer([&] {
+        Elements rows;
 
-        std::cout << std::left << std::setw(8) << proc.pid << std::setw(26)
-                  << truncate_string(proc.name, 25) << std::setw(10)
-                  << format_cpu(proc.cpu_usage) << std::setw(12)
-                  << format_memory(proc.mem_usage) << std::setw(10)
-                  << get_state_name(proc.state) << "\n";
-    }
+        rows.push_back(hbox({text("PID") | bold | border,
+                             text("PROGRAM") | bold | border | flex,
+                             text("CPU%") | bold | border,
+                             text("MEMORY(MB)") | bold | border,
+                             text("STATE") | bold | border}));
 
-    std::cout << std::endl << "Ctrl+C to exit" << std::endl;
+        for (int i = 0; i < processes.size(); i++) {
+            const Process& p = processes[i];
+            auto style = (i == selected) ? inverted : nothing;
+
+            std::ostringstream s_stream;
+
+            s_stream << std::setw(8) << p.pid << std::setw(26) << p.name
+                     << std::setw(10) << p.cpu_usage << std::setw(12)
+                     << p.mem_usage << std::setw(10) << p.state;
+
+            rows.push_back(text(s_stream.str()) | style);
+        }
+
+        auto main_table = vbox(rows);
+
+        if (show_info) {
+            auto& p = processes[selected];
+            auto info_box =
+                vbox({text("PROCESS INFO") | bold,
+                      text("PID: " + std::to_string(p.pid)),
+                      text("Name: " + p.name),
+                      text("CPU: " + std::to_string(p.cpu_usage)),
+                      text("Memory: " + std::to_string(p.mem_usage)),
+                      text("State: " + p.state),
+                      text("Press 'i' to close info")}) |
+                border | size(HEIGHT, LESS_THAN, 10);
+
+            return vbox({main_table, separator(), info_box});
+        }
+
+        return main_table;
+    });
+
+    auto table_component = CatchEvent(table_renderer, [&](Event event) {
+        if (event == Event::ArrowUp) {
+            if (selected > 0) selected--;
+        } else if (event == Event::ArrowDown) {
+            if (selected < (int)processes.size() - 1) selected++;
+        } else if (event == Event::Character('i')) {
+            show_info = !show_info;
+        } else if (event == Event::Character('q')) {
+            screen.Exit();
+        }
+        return true;
+    });
+
+    screen.Loop(table_component);
 }
