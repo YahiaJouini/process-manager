@@ -3,7 +3,7 @@
 #include <sstream>
 #include <vector>
 
-SystemMonitor::SystemMonitor() : totalCpuTimeCurr(0), totalCpuTimePrev(0) {
+SystemMonitor::SystemMonitor() : totalCpuTimePrev(0), totalCpuTimeCurr(0) {
     this->update_cpu_times();
     this->totalCpuTimePrev = this->totalCpuTimeCurr;
 };

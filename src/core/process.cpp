@@ -6,11 +6,11 @@
 #include <thread>
 
 Process::Process(int pid)
-    : pid(pid),
+    : prev_usr_time(0),
+      prev_sys_time(0),
+      pid(pid),
       cpu_usage(0.0f),
-      mem_usage(0),
-      prev_usr_time(0),
-      prev_sys_time(0) {};
+      mem_usage(0) {}
 
 void Process::update_stats(unsigned long prev_total, unsigned long curr_total) {
     const std::string stat_path =
@@ -76,7 +76,7 @@ void Process::update_stats(unsigned long prev_total, unsigned long curr_total) {
 
     // ex: VmRSS: 9200kB
     size_t pos = status_content.find("VmRSS:");
-    if (pos != -1) {
+    if (pos != std::string::npos) {
         // pos + 6 because between "VmRSS: val" is 6 spaces
         std::istringstream memory_stream(status_content.substr(pos + 6));
         memory_stream >> this->mem_usage;

@@ -6,7 +6,7 @@
 #include "../include/system_monitor.h"
 
 bool running = true;
-void signalHandler(int signum) { running = false; }
+void signalHandler(int) { running = false; }
 
 int main() {
     // SIGINT is signal sent when CTRL+C is pressed
