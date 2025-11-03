@@ -5,8 +5,8 @@
 
 class FileReader {
    public:
-    std::string readFile(const std::string& path);
-    std::vector<std::string> listDirectories(const std::string& path);
+    std::string read_file(const std::string& path);
+    std::vector<std::string> list_directories(const std::string& path);
 };
 
 #endif

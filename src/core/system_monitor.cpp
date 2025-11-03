@@ -4,13 +4,13 @@
 #include <vector>
 
 SystemMonitor::SystemMonitor() : totalCpuTimeCurr(0), totalCpuTimePrev(0) {
-    this->updateCpuTimes();
+    this->update_cpu_times();
     this->totalCpuTimePrev = this->totalCpuTimeCurr;
 };
 
-void SystemMonitor::updateCpuTimes() {
+void SystemMonitor::update_cpu_times() {
     // system wide cpu statistics
-    std::string content = this->reader.readFile("/proc/stat");
+    std::string content = this->reader.read_file("/proc/stat");
 
     // first line contains aggregate stats of all cpu cores combined
     std::istringstream stream(content);
@@ -28,10 +28,10 @@ void SystemMonitor::updateCpuTimes() {
         user + nice + system + idle + iowait + irq + softirq + steal;
 }
 
-void SystemMonitor::updateProcesses() {
-    this->updateCpuTimes();
+void SystemMonitor::update_processes() {
+    this->update_cpu_times();
     // list of process directories
-    std::vector<std::string> pids = this->reader.listDirectories("/proc");
+    std::vector<std::string> pids = this->reader.list_directories("/proc");
     std::map<int, Process> new_map;
 
     // re-use existing processes or create new
@@ -39,13 +39,13 @@ void SystemMonitor::updateProcesses() {
         int pid = std::stoi(pid_str);
         if (this->process_map.find(pid) != this->process_map.end()) {
             // re-use existing process
-            Process& proc = this->process_map[pid];
-            proc.updateStats(this->totalCpuTimePrev, this->totalCpuTimeCurr);
+            Process& proc = this->process_map.find(pid);
+            proc.update_stats(this->totalCpuTimePrev, this->totalCpuTimeCurr);
             new_map[pid] = proc;
         } else {
             // new process
             Process proc(pid);
-            proc.updateStats(this->totalCpuTimePrev, this->totalCpuTimePrev);
+            proc.update_stats(this->totalCpuTimePrev, this->totalCpuTimePrev);
             new_map[pid] = proc;
         }
 
@@ -54,7 +54,7 @@ void SystemMonitor::updateProcesses() {
     }
 }
 
-std::vector<Process> SystemMonitor::getProcesses() {
+std::vector<Process> SystemMonitor::get_processes() {
     std::vector<Process> procs;
     for (const auto& pair : this->process_map) {
         procs.push_back(pair.second);

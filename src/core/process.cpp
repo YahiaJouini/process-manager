@@ -4,13 +4,17 @@
 #include <string>
 
 Process::Process(int pid)
-    : pid(pid), cpuUsage(0.0f), memUsage(0), prevUtime(0), prevStime(0) {
-    updateStats(0, 1);
+    : pid(pid),
+      cpu_usage(0.0f),
+      mem_usage(0),
+      prev_usr_time(0),
+      prev_sys_time(0) {
+    update_stats(0, 1);
 };
 
-void Process::updateStats(unsigned long prevTotal, unsigned long currTotal) {
+void Process::update_stats(unsigned long prevTotal, unsigned long currTotal) {
     const std::string stat_path = "/proc" + std::to_string(this->pid) + "/stat";
-    const std::string content = this->reader.readFile(stat_path);
+    const std::string content = this->reader.read_file(stat_path);
     if (content.empty()) return;
 
     // will allow us to iterate content word by word
@@ -37,30 +41,30 @@ void Process::updateStats(unsigned long prevTotal, unsigned long currTotal) {
     if (prevTotal > 0) {
         // how much time this process used
         unsigned long processTimeUsed =
-            (utime + stime) - (this->prevUtime + this->prevStime);
+            (utime + stime) - (this->prev_usr_time + this->prev_sys_time);
 
         // how mych time passed for everyone (all processes)
         // currTotal and prevTotal will be passed from system monitor
         unsigned long totalTimePassed = currTotal - prevTotal;
 
         if (totalTimePassed > 0) {
-            this->cpuUsage = (100.0f * processTimeUsed) / totalTimePassed;
+            this->cpu_usage = (100.0f * processTimeUsed) / totalTimePassed;
         }
     }
 
-    this->prevUtime = utime;
-    this->prevStime = stime;
+    this->prev_usr_time = utime;
+    this->prev_sys_time = stime;
 
     // get memory usage from /proc/<pid>/status
     const std::string status_path =
         "/proc" + std::to_string(this->pid) + "/status";
-    const std::string status_content = this->reader.readFile(status_path);
+    const std::string status_content = this->reader.read_file(status_path);
 
     // ex: VmRSS: 9200kB
     size_t pos = status_content.find("VmRSS:");
     if (pos != -1) {
         // pos + 6 because between "VmRSS: val" is 6 spaces
         std::istringstream memory_stream(status_content.substr(pos + 6));
-        memory_stream >> this->memUsage;
+        memory_stream >> this->mem_usage;
     }
 }

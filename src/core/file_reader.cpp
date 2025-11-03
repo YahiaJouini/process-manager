@@ -8,7 +8,7 @@
 
 #include "../utils/is_numeric.cpp"
 
-std::string FileReader::readFile(const std::string& path) {
+std::string FileReader::read_file(const std::string& path) {
     std::ifstream file(path);
     if (!file.is_open()) return "";
     std::stringstream buffer;
@@ -16,7 +16,7 @@ std::string FileReader::readFile(const std::string& path) {
     return buffer.str();
 }
 
-std::vector<std::string> FileReader::listDirectories(const std::string& path) {
+std::vector<std::string> FileReader::list_directories(const std::string& path) {
     namespace fs = std::filesystem;
     std::vector<std::string> dirs;
     if (!fs::exists(path) || !fs::is_directory(path)) {

@@ -13,12 +13,12 @@ class SystemMonitor {
     std::map<int, Process> process_map;
     unsigned long totalCpuTimePrev;
     unsigned long totalCpuTimeCurr;
-    void updateCpuTimes();
+    void update_cpu_times();
 
    public:
     SystemMonitor();
-    void updateProcesses();
-    std::vector<Process> getProcesses();
+    void update_processes();
+    std::vector<Process> get_processes();
     void refresh();
 };
 

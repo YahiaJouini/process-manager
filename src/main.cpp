@@ -1,46 +1,26 @@
-#include <cctype>
-#include <filesystem>
-#include <fstream>
-#include <iostream>
+#include <chrono>
+#include <csignal>
+#include <thread>
 
-namespace fs = std::filesystem;
+#include "core/display.cpp"
+#include "core/system_monitor.cpp"
 
-bool is_numeric(const std::string& s) {
-    for (char c : s) {
-        if (!isdigit(c)) return false;
-    }
-
-    return true;
-}
+bool running = true;
+void signalHandler(int signum) { running = false; }
 
 int main() {
-    const fs::path proc_path = "/proc";
+    // SIGINT is signal sent when CTRL+C is pressed
+    // handler is what get's called when that signal arrives
+    signal(SIGINT, signalHandler);
 
-    if (!fs::exists(proc_path) || !fs::is_directory(proc_path)) {
-        std::cout << "Processes directory does not exist" << std::endl;
-    }
+    SystemMonitor monitor;
+    Display display;
 
-    for (const auto& entry : fs::directory_iterator(proc_path)) {
-        // skip non directories
-        if (!entry.is_directory()) continue;
-
-        // directory with numeric names are processes
-        const std::string pid_str = entry.path().filename();
-        if (!is_numeric(pid_str)) continue;
-
-        // path to process name
-        const fs::path comm_path = proc_path.string() + "/" + pid_str + "/comm";
-
-        // fstream class takes path in constructor and opens it for reading
-        std::ifstream file(comm_path);
-        std::string process_name;
-
-        if (file.is_open()) {
-            std::getline(file, process_name);
-            file.close();
-            std::cout << "PID: " << pid_str << "  |  Name: " << process_name
-                      << std::endl;
-        }
+    while (running) {
+        monitor.update_processes();
+        display.render(monitor.get_processes());
+        // update process info every 1 second
+        std::this_thread::sleep_for(std::chrono::seconds(1));
     }
 
     return 0;
