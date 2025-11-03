@@ -2,8 +2,8 @@
 #include <csignal>
 #include <thread>
 
-#include "core/display.cpp"
-#include "core/system_monitor.cpp"
+#include "../include/display.h"
+#include "../include/system_monitor.h"
 
 bool running = true;
 void signalHandler(int signum) { running = false; }

@@ -10,4 +10,5 @@ class Display {
     void render(const std::vector<Process>&);
     void clear_screen();
 };
+
 #endif

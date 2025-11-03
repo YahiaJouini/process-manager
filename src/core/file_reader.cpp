@@ -6,7 +6,7 @@
 #include <stdexcept>
 #include <vector>
 
-#include "../utils/is_numeric.cpp"
+#include "../../include/is_numeric.h"
 
 std::string FileReader::read_file(const std::string& path) {
     std::ifstream file(path);

@@ -12,7 +12,7 @@ Process::Process(int pid)
     update_stats(0, 1);
 };
 
-void Process::update_stats(unsigned long prevTotal, unsigned long currTotal) {
+void Process::update_stats(unsigned long prev_total, unsigned long curr_total) {
     const std::string stat_path = "/proc" + std::to_string(this->pid) + "/stat";
     const std::string content = this->reader.read_file(stat_path);
     if (content.empty()) return;
@@ -38,14 +38,14 @@ void Process::update_stats(unsigned long prevTotal, unsigned long currTotal) {
     stream >> utime >> stime;
 
     // calculate cpu usage of process
-    if (prevTotal > 0) {
+    if (prev_total > 0) {
         // how much time this process used
         unsigned long processTimeUsed =
             (utime + stime) - (this->prev_usr_time + this->prev_sys_time);
 
         // how mych time passed for everyone (all processes)
         // currTotal and prevTotal will be passed from system monitor
-        unsigned long totalTimePassed = currTotal - prevTotal;
+        unsigned long totalTimePassed = curr_total - prev_total;
 
         if (totalTimePassed > 0) {
             this->cpu_usage = (100.0f * processTimeUsed) / totalTimePassed;

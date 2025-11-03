@@ -36,22 +36,24 @@ void SystemMonitor::update_processes() {
 
     // re-use existing processes or create new
     for (const auto& pid_str : pids) {
+        // we are sure it's numeric value
         int pid = std::stoi(pid_str);
-        if (this->process_map.find(pid) != this->process_map.end()) {
+        auto it = this->process_map.find(pid);
+        if (it != this->process_map.end()) {
             // re-use existing process
-            Process& proc = this->process_map.find(pid);
+            Process& proc = it->second;
             proc.update_stats(this->totalCpuTimePrev, this->totalCpuTimeCurr);
-            new_map[pid] = proc;
+            new_map.emplace(pid, proc);
         } else {
             // new process
             Process proc(pid);
             proc.update_stats(this->totalCpuTimePrev, this->totalCpuTimePrev);
-            new_map[pid] = proc;
+            new_map.emplace(pid, std::move(proc));
         }
-
-        this->process_map = new_map;
-        this->totalCpuTimePrev = this->totalCpuTimeCurr;
     }
+
+    this->process_map = new_map;
+    this->totalCpuTimePrev = this->totalCpuTimeCurr;
 }
 
 std::vector<Process> SystemMonitor::get_processes() {
