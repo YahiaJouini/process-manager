@@ -22,7 +22,6 @@ class Process {
     long mem_usage;
 
     Process(int pid);
-    bool kill(int pid);
     // needs prevtotal and currTotal ticks of the process to calculate usage
     // from cpu total ticks,
     void update_stats(unsigned long prev_total, unsigned long curr_total);

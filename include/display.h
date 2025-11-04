@@ -9,12 +9,20 @@
 
 class Display {
    public:
+    void render();
+
+   private:
     ftxui::Element table_header();
     ftxui::Element table_row(const Process&, bool selected);
     ftxui::Element info_box(const Process&);
     ftxui::Element footer();
     ftxui::Element sort_popup(int);
-    void render();
+    ftxui::Element kill_confirm_popup(const Process&);
+
+    // helper
+    bool in_range(int value, int min, int max) {
+        return (value >= min && value <= max);
+    }
 };
 
 #endif

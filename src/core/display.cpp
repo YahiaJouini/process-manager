@@ -1,5 +1,7 @@
 #include "../../include/display.h"
 
+#include <signal.h>  // for kill and SIGKILL
+
 #include <ftxui/component/component.hpp>
 #include <ftxui/component/screen_interactive.hpp>
 #include <ftxui/dom/node.hpp>
@@ -78,7 +80,7 @@ Element Display::info_box(const Process& p) {
                  hbox({text(" PID: ") | bold, text(std::to_string(p.pid))}),
                  hbox({text(" Name: ") | bold, text(p.name)}),
                  hbox({text(" CPU: ") | bold,
-                       text(format_cpu(p.cpu_usage) + "%")}),
+                       text(format_cpu(p.cpu_usage) + " %")}),
                  hbox({text(" Memory: ") | bold,
                        text(format_memory(p.mem_usage) + " MB")}),
                  hbox({text(" State: ") | bold, text(get_state_name(p.state))}),
@@ -88,8 +90,23 @@ Element Display::info_box(const Process& p) {
 
 Element Display::footer() {
     return hbox({text(" ↑/↓: Navigate ") | dim, separator(),
-                 text(" i: Info ") | dim, separator(), text(" s: Sort ") | dim,
-                 separator(), text(" q: Quit ") | dim}) |
+                 text(" i: Info ") | dim, separator(), text(" k: Kill ") | dim,
+                 separator(), text(" s: Sort ") | dim, separator(),
+                 text(" q: Quit ") | dim}) |
+           center;
+}
+
+Element Display::kill_confirm_popup(const Process& process) {
+    return vbox({
+               text("Kill Process?") | bold | color(Color::RedLight) | center,
+               separator(),
+               text("PID: " + std::to_string(process.pid)) | center,
+               text("  Name: " + process.name + "  ") | center,
+               separator(),
+               text(" Type 'y' to confirm, ESC or 'n' to cancel ") | center,
+           }) |
+           borderRounded | size(WIDTH, LESS_THAN, 50) |
+           size(HEIGHT, LESS_THAN, 10) | clear_under | bgcolor(Color::Black) |
            center;
 }
 
@@ -101,18 +118,18 @@ Element Display::sort_popup(int sort_selected) {
         items.push_back(text(options[i]) |
                         (selected_item ? inverted : nothing));
     }
-
-    return window(text(" Sort by ") | bold,
-                  vbox(items) | center | size(WIDTH, EQUAL, 20)) |
-           clear_under | bgcolor(Color::Black) | center;
+    return vbox({text(" Sort by ") | bold | center, separator(),
+                 vbox(items) | center | size(WIDTH, EQUAL, 20)}) |
+           borderRounded | clear_under | bgcolor(Color::Black) | center;
 }
 
 void Display::render() {
     auto screen = ScreenInteractive::FitComponent();
-    int selected = 0;
+    int selected = 0;  // position of selected process
     bool show_info = false;
     bool show_sort_mode = false;
     int sort_selected = 0;  // 0 = cpu, 1 = momory
+    bool show_kill_confirm = false;
 
     SystemMonitor monitor;
 
@@ -138,16 +155,17 @@ void Display::render() {
         rows.push_back(this->table_header());
         rows.push_back(separator());
 
-        // to ensure selected is not out of range if processes list size
-        // changes
-        if (selected >= (int)processes.size()) {
-            selected = (int)processes.size() - 1;
-        }
+        int p_size = (int)processes.size();
+
+        // to ensure selected is not out of range if processes list
+        // size changes
+        if (selected >= p_size) selected = p_size - 1;
+
         if (selected < 0) selected = 0;
 
-        for (size_t i = 0; i < processes.size(); i++) {
+        for (int i = 0; i < p_size; i++) {
             const Process& process = processes[i];
-            rows.push_back(this->table_row(process, selected == (int)i));
+            rows.push_back(this->table_row(process, selected == i));
         }
 
         Element main_table = vbox(rows) | vscroll_indicator  // scrollbar
@@ -156,7 +174,7 @@ void Display::render() {
                              | border;
 
         // don't show footer on show info box
-        if (show_info && selected >= 0 && selected < (int)processes.size()) {
+        if (show_info && selected >= 0 && selected < p_size) {
             return vbox(
                 {main_table, text(""), this->info_box(processes[selected])});
         }
@@ -167,10 +185,41 @@ void Display::render() {
         if (show_sort_mode) {
             layout = dbox({layout, this->sort_popup(sort_selected)});
         }
+
+        if (show_kill_confirm && selected >= 0 && selected < p_size) {
+            layout =
+                dbox({layout, this->kill_confirm_popup(processes[selected])});
+        }
         return layout;
     });
 
     auto table_component = CatchEvent(table_renderer, [&](Event event) {
+        // kill popup events
+        if (show_kill_confirm) {
+            if (event == Event::Character('y') ||
+                event == Event::Character('Y')) {
+                // lock process so only this thread can modify it
+                {
+                    std::lock_guard<std::mutex> lock(state_mutex);
+                    if (selected >= 0 && selected < (int)processes.size()) {
+                        kill(processes[selected].pid, SIGKILL);
+                        // update to reflect changes
+                        monitor.update_processes();
+                        processes = monitor.get_processes(sort_by);
+                    }
+                }
+                show_kill_confirm = false;
+                screen.PostEvent(Event::Custom);  // force redraw right away
+                return true;
+            } else if (event.is_character() || event == Event::Escape) {
+                // any character other than y
+                show_kill_confirm = false;
+                return true;
+            }
+            return false;
+        }
+
+        // sort popup events
         if (show_sort_mode) {
             if (event == Event::ArrowUp && sort_selected > 0) {
                 sort_selected--;
@@ -190,7 +239,7 @@ void Display::render() {
                     }
                     processes = monitor.get_processes(sort_by);
                 }
-
+                selected = 0;
                 show_sort_mode = false;
                 screen.PostEvent(Event::Custom);  // force redraw right away
                 return true;
@@ -200,27 +249,66 @@ void Display::render() {
             }
             return false;
         }
-        if (event == Event::ArrowUp) {
-            if (selected > 0) selected--;
-            return true;
-        } else if (event == Event::ArrowDown) {
-            // lock to safely read processes.size()
-            std::lock_guard<std::mutex> lock(state_mutex);
-            if (selected < (int)processes.size() - 1) selected++;
-            return true;
-        } else if (event == Event::Character('i') ||
-                   event == Event::Character('I')) {
-            show_info = !show_info;
-            return true;
-        } else if (event == Event::Character('s') ||
-                   event == Event::Character('S')) {
-            show_sort_mode = true;
-            return true;
-        } else if (event == Event::Character('q') ||
-                   event == Event::Character('Q')) {
-            running = false;  // signal the updater thread to stop
-            screen.Exit();
-            return true;
+        // sort popup events
+        if (show_sort_mode) {
+            if (event == Event::ArrowUp && sort_selected > 0) {
+                sort_selected--;
+                return true;
+            } else if (event == Event::ArrowDown && sort_selected < 1) {
+                sort_selected++;
+                return true;
+            } else if (event == Event::Return) {
+                // lock state because we're modifying sort_by wich is shared
+                // with updater thread
+                {
+                    std::lock_guard<std::mutex> lock(state_mutex);
+                    if (sort_selected == 0) {
+                        sort_by = SystemMonitor::SortBy::Cpu;
+                    } else if (sort_selected == 1) {
+                        sort_by = SystemMonitor::SortBy::Memory;
+                    }
+                    processes = monitor.get_processes(sort_by);
+                }
+                selected = 0;
+                show_sort_mode = false;
+                screen.PostEvent(Event::Custom);  // force redraw right away
+                return true;
+            } else if (event == Event::Escape) {
+                show_sort_mode = false;
+                return true;
+            }
+            return false;
+        }
+
+        // allow events only if no popup is shown
+        if (!show_kill_confirm && !show_sort_mode) {
+            // regular table events
+            if (event == Event::ArrowUp) {
+                if (selected > 0) selected--;
+                return true;
+            } else if (event == Event::ArrowDown) {
+                // lock to safely read processes.size()
+                std::lock_guard<std::mutex> lock(state_mutex);
+                if (selected < (int)processes.size() - 1) selected++;
+                return true;
+            } else if (event == Event::Character('i') ||
+                       event == Event::Character('I')) {
+                show_info = !show_info;
+                return true;
+            } else if (event == Event::Character('k') ||
+                       event == Event::Character('K')) {
+                show_kill_confirm = true;
+                return true;
+            } else if (event == Event::Character('s') ||
+                       event == Event::Character('S')) {
+                show_sort_mode = true;
+                return true;
+            } else if (event == Event::Character('q') ||
+                       event == Event::Character('Q')) {
+                running = false;  // signal the updater thread to stop
+                screen.Exit();
+                return true;
+            }
         }
         return false;
     });
@@ -228,12 +316,15 @@ void Display::render() {
     // background thread for live updates
     std::thread updater([&] {
         while (running) {
-            {
+            // added show_kill_confirm check to avoid updating while in kill
+            // because updating process list might remove the selected process
+            if (!show_kill_confirm) {
                 // Lock before writing to shared data
                 std::lock_guard<std::mutex> lock(state_mutex);
                 monitor.update_processes();
                 processes = monitor.get_processes(sort_by);
             }
+
             screen.PostEvent(Event::Custom);  // trigger ftxui to redraw
             std::this_thread::sleep_for(std::chrono::seconds(1));
         }
