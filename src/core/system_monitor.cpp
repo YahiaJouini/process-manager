@@ -47,7 +47,7 @@ void SystemMonitor::update_processes() {
         } else {
             // new process
             Process proc(pid);
-            proc.update_stats(this->totalCpuTimePrev, this->totalCpuTimePrev);
+            proc.update_stats(this->totalCpuTimePrev, this->totalCpuTimeCurr);
             new_map.emplace(pid, std::move(proc));
         }
     }
