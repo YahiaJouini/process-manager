@@ -202,7 +202,12 @@ void Display::render() {
                 {
                     std::lock_guard<std::mutex> lock(state_mutex);
                     if (selected >= 0 && selected < (int)processes.size()) {
-                        kill(processes[selected].pid, SIGKILL);
+                        for (const auto& proc : processes) {
+                            // kill all instances of that process name
+                            if (proc.name == processes[selected].name) {
+                                kill(proc.pid, SIGKILL);
+                            }
+                        }
                         // update to reflect changes
                         monitor.update_processes();
                         processes = monitor.get_processes(sort_by);
@@ -317,7 +322,8 @@ void Display::render() {
     std::thread updater([&] {
         while (running) {
             // added show_kill_confirm check to avoid updating while in kill
-            // because updating process list might remove the selected process
+            // because updating process list might remove the selected
+            // process
             if (!show_kill_confirm) {
                 // Lock before writing to shared data
                 std::lock_guard<std::mutex> lock(state_mutex);
