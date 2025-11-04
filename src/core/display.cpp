@@ -57,7 +57,7 @@ Element Display::table_row(const Process& process, bool selected) {
     }
 
     if (process.mem_usage > 1000.0f) {
-        mem_text = mem_text | color(Color::Red);
+        mem_text = mem_text | color(Color::Red1);
     } else if (process.mem_usage > 500.0f) {
         mem_text = mem_text | color(Color::Yellow);
     } else {
@@ -103,7 +103,7 @@ Element Display::kill_confirm_popup(const Process& process) {
                text("PID: " + std::to_string(process.pid)) | center,
                text("  Name: " + process.name + "  ") | center,
                separator(),
-               text(" Type 'y' to confirm, ESC or 'n' to cancel ") | center,
+               text(" Type 'y' to confirm, ESC to cancel ") | center,
            }) |
            borderRounded | size(WIDTH, LESS_THAN, 50) |
            size(HEIGHT, LESS_THAN, 10) | clear_under | bgcolor(Color::Black) |
