@@ -1,5 +1,6 @@
 #include "../../include/system_monitor.h"
 
+#include <algorithm>
 #include <sstream>
 #include <vector>
 
@@ -56,10 +57,20 @@ void SystemMonitor::update_processes() {
     this->totalCpuTimePrev = this->totalCpuTimeCurr;
 }
 
-std::vector<Process> SystemMonitor::get_processes() {
+std::vector<Process> SystemMonitor::get_processes(SortBy sort_by) {
     std::vector<Process> procs;
+
+    // reserve procs to avoid multiple vector reallocations
+    procs.reserve(this->process_map.size());
+
     for (const auto& pair : this->process_map) {
         procs.push_back(pair.second);
     }
+
+    std::sort(procs.begin(), procs.end(),
+              [&sort_by](const Process& a, const Process& b) {
+                  return sort_by == SortBy::Cpu ? a.cpu_usage > b.cpu_usage
+                                                : a.mem_usage > b.mem_usage;
+              });
     return procs;
 }

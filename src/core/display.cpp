@@ -1,10 +1,8 @@
 #include "../../include/display.h"
 
-#include <algorithm>
 #include <ftxui/component/component.hpp>
 #include <ftxui/component/screen_interactive.hpp>
 #include <ftxui/dom/node.hpp>
-#include <iostream>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -31,8 +29,7 @@ Element Display::table_header() {
                      size(WIDTH, EQUAL, 14),
                  separator(),
                  text(" STATE ") | bold | color(Color::Cyan) | center |
-                     size(WIDTH, EQUAL, 12)}) |
-           bgcolor(Color::GrayDark);
+                     size(WIDTH, EQUAL, 12)});
 }
 
 Element Display::table_row(const Process& process, bool selected) {
@@ -69,31 +66,71 @@ Element Display::table_row(const Process& process, bool selected) {
                         separator(), mem_text, separator(), state_text});
 
     if (selected) {
-        return row | bgcolor(Color::Blue) | bold;
+        return row | bgcolor(Color::Blue) | bold | focus;
     }
 
     return row;
 }
-void Display::render() {
-    using namespace ftxui;
-    auto screen = ScreenInteractive::FitComponent();
 
+Element Display::info_box(const Process& p) {
+    return vbox({text(" PROCESS DETAILS ") | bold | color(Color::Cyan) | center,
+                 separator(),
+                 hbox({text(" PID: ") | bold, text(std::to_string(p.pid))}),
+                 hbox({text(" Name: ") | bold, text(p.name)}),
+                 hbox({text(" CPU: ") | bold,
+                       text(format_cpu(p.cpu_usage) + "%")}),
+                 hbox({text(" Memory: ") | bold,
+                       text(format_memory(p.mem_usage) + " MB")}),
+                 hbox({text(" State: ") | bold, text(get_state_name(p.state))}),
+                 separator(), text(" Press 'i' to close ") | dim | center}) |
+           border | color(Color::White) | bgcolor(Color::GrayDark);
+}
+
+Element Display::footer() {
+    return hbox({text(" ↑/↓: Navigate ") | dim, separator(),
+                 text(" i: Info ") | dim, separator(), text(" s: Sort ") | dim,
+                 separator(), text(" q: Quit ") | dim}) |
+           center;
+}
+
+Element Display::sort_popup(int sort_selected) {
+    std::vector<std::string> options = {"CPU Usage", "Memory Usage"};
+    Elements items;
+    for (int i = 0; i < (int)options.size(); ++i) {
+        bool selected_item = (i == sort_selected);
+        items.push_back(text(options[i]) |
+                        (selected_item ? inverted : nothing));
+    }
+
+    return window(text(" Sort by ") | bold,
+                  vbox(items) | center | size(WIDTH, EQUAL, 20)) |
+           clear_under | bgcolor(Color::Black) | center;
+}
+
+void Display::render() {
+    auto screen = ScreenInteractive::FitComponent();
     int selected = 0;
     bool show_info = false;
+    bool show_sort_mode = false;
+    int sort_selected = 0;  // 0 = cpu, 1 = momory
 
     SystemMonitor monitor;
 
-    // lock to make sure only one thread touches a shared resource at a time
-    std::mutex proc_mutex;
+    // single mutex to protect shared state (processes, sort_by, and UI state)
+    std::mutex state_mutex;
+
+    // protected by state mutex
+    SystemMonitor::SortBy sort_by = SystemMonitor::SortBy::Cpu;
     std::atomic<bool> running = true;
 
     // initial load
     monitor.update_processes();
-    std::vector<Process> processes = monitor.get_processes();
+    std::vector<Process> processes = monitor.get_processes(sort_by);
 
     auto table_renderer = Renderer([&] {
-        // prevents race conditions
-        std::lock_guard<std::mutex> lock(proc_mutex);
+        // lock state through the entire render so only render thread has access
+        std::lock_guard<std::mutex> lock(state_mutex);
+
         Elements rows;
         rows.push_back(text("PROCESS MANAGER") | bold |
                        color(Color::GreenLight) | center);
@@ -101,7 +138,8 @@ void Display::render() {
         rows.push_back(this->table_header());
         rows.push_back(separator());
 
-        // to ensure selected is not out of range if processes list size changes
+        // to ensure selected is not out of range if processes list size
+        // changes
         if (selected >= (int)processes.size()) {
             selected = (int)processes.size() - 1;
         }
@@ -111,49 +149,72 @@ void Display::render() {
             const Process& process = processes[i];
             rows.push_back(this->table_row(process, selected == (int)i));
         }
-        Element main_table = vbox(rows) | border;
 
-        if (show_info && !processes.empty() && selected >= 0 &&
-            selected < (int)processes.size()) {
-            const Process& p = processes[selected];
-            Element info_box =
-                vbox(
-                    {text(" PROCESS DETAILS ") | bold | color(Color::Cyan) |
-                         center,
-                     separator(),
-                     hbox({text(" PID: ") | bold, text(std::to_string(p.pid))}),
-                     hbox({text(" Name: ") | bold, text(p.name)}),
-                     hbox({text(" CPU: ") | bold,
-                           text(format_cpu(p.cpu_usage) + "%")}),
-                     hbox({text(" Memory: ") | bold,
-                           text(format_memory(p.mem_usage) + " MB")}),
-                     hbox({text(" State: ") | bold,
-                           text(get_state_name(p.state))}),
-                     separator(),
-                     text(" Press 'i' to close ") | dim | center}) |
-                border | color(Color::White) | bgcolor(Color::GrayDark);
-            return vbox({main_table, text(""), info_box});
+        Element main_table = vbox(rows) | vscroll_indicator  // scrollbar
+                             | frame  // make it scrollable
+                             | flex   // make it expand to fill space
+                             | border;
+
+        // don't show footer on show info box
+        if (show_info && selected >= 0 && selected < (int)processes.size()) {
+            return vbox(
+                {main_table, text(""), this->info_box(processes[selected])});
         }
 
-        Element footer = hbox({text(" ↑/↓: Navigate ") | dim, separator(),
-                               text(" i: Info ") | dim, separator(),
-                               text(" q: Quit ") | dim}) |
-                         center;
-        return vbox({main_table, text(""), footer});
+        Element layout = vbox({main_table, text(""), this->footer()});
+
+        // overwrite popup if active
+        if (show_sort_mode) {
+            layout = dbox({layout, this->sort_popup(sort_selected)});
+        }
+        return layout;
     });
 
     auto table_component = CatchEvent(table_renderer, [&](Event event) {
+        if (show_sort_mode) {
+            if (event == Event::ArrowUp && sort_selected > 0) {
+                sort_selected--;
+                return true;
+            } else if (event == Event::ArrowDown && sort_selected < 1) {
+                sort_selected++;
+                return true;
+            } else if (event == Event::Return) {
+                // lock state because we're modifying sort_by wich is shared
+                // with updater thread
+                {
+                    std::lock_guard<std::mutex> lock(state_mutex);
+                    if (sort_selected == 0) {
+                        sort_by = SystemMonitor::SortBy::Cpu;
+                    } else if (sort_selected == 1) {
+                        sort_by = SystemMonitor::SortBy::Memory;
+                    }
+                    processes = monitor.get_processes(sort_by);
+                }
+
+                show_sort_mode = false;
+                screen.PostEvent(Event::Custom);  // force redraw right away
+                return true;
+            } else if (event == Event::Escape) {
+                show_sort_mode = false;
+                return true;
+            }
+            return false;
+        }
         if (event == Event::ArrowUp) {
             if (selected > 0) selected--;
             return true;
         } else if (event == Event::ArrowDown) {
             // lock to safely read processes.size()
-            std::lock_guard<std::mutex> lock(proc_mutex);
+            std::lock_guard<std::mutex> lock(state_mutex);
             if (selected < (int)processes.size() - 1) selected++;
             return true;
         } else if (event == Event::Character('i') ||
                    event == Event::Character('I')) {
             show_info = !show_info;
+            return true;
+        } else if (event == Event::Character('s') ||
+                   event == Event::Character('S')) {
+            show_sort_mode = true;
             return true;
         } else if (event == Event::Character('q') ||
                    event == Event::Character('Q')) {
@@ -169,19 +230,16 @@ void Display::render() {
         while (running) {
             {
                 // Lock before writing to shared data
-                std::lock_guard<std::mutex> lock(proc_mutex);
+                std::lock_guard<std::mutex> lock(state_mutex);
                 monitor.update_processes();
-                processes = monitor.get_processes();
-                std::sort(processes.begin(), processes.end(),
-                          [](const Process& a, const Process& b) {
-                              return a.cpu_usage > b.cpu_usage;
-                          });
+                processes = monitor.get_processes(sort_by);
             }
             screen.PostEvent(Event::Custom);  // trigger ftxui to redraw
             std::this_thread::sleep_for(std::chrono::seconds(1));
         }
     });
-    // Start the ftxui event loop.
+
+    // start the ftxui event loop.
     screen.Loop(table_component);
 
     // clean up on screen exit

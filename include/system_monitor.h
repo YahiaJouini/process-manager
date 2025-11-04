@@ -16,9 +16,10 @@ class SystemMonitor {
     void update_cpu_times();
 
    public:
+    enum class SortBy { Cpu, Memory };
     SystemMonitor();
     void update_processes();
-    std::vector<Process> get_processes();
+    std::vector<Process> get_processes(SortBy);
     void refresh();
 };
 
