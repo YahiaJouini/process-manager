@@ -130,6 +130,7 @@ void Display::render() {
     bool show_sort_mode = false;
     int sort_selected = 0;  // 0 = cpu, 1 = momory
     bool show_kill_confirm = false;
+    using SortBy = SystemMonitor::SortBy;
 
     SystemMonitor monitor;
 
@@ -137,7 +138,7 @@ void Display::render() {
     std::mutex state_mutex;
 
     // protected by state mutex
-    SystemMonitor::SortBy sort_by = SystemMonitor::SortBy::Cpu;
+    SortBy sort_by = SortBy::Cpu;
     std::atomic<bool> running = true;
 
     // initial load
@@ -223,7 +224,6 @@ void Display::render() {
             }
             return false;
         }
-
         // sort popup events
         if (show_sort_mode) {
             if (event == Event::ArrowUp && sort_selected > 0) {
@@ -233,58 +233,25 @@ void Display::render() {
                 sort_selected++;
                 return true;
             } else if (event == Event::Return) {
-                // lock state because we're modifying sort_by wich is shared
-                // with updater thread
-                {
-                    std::lock_guard<std::mutex> lock(state_mutex);
-                    if (sort_selected == 0) {
-                        sort_by = SystemMonitor::SortBy::Cpu;
-                    } else if (sort_selected == 1) {
-                        sort_by = SystemMonitor::SortBy::Memory;
-                    }
-                    processes = monitor.get_processes(sort_by);
-                }
-                selected = 0;
-                show_sort_mode = false;
-                screen.PostEvent(Event::Custom);  // force redraw right away
-                return true;
-            } else if (event == Event::Escape) {
-                show_sort_mode = false;
-                return true;
-            }
-            return false;
-        }
-        // sort popup events
-        if (show_sort_mode) {
-            if (event == Event::ArrowUp && sort_selected > 0) {
-                sort_selected--;
-                return true;
-            } else if (event == Event::ArrowDown && sort_selected < 1) {
-                sort_selected++;
-                return true;
-            } else if (event == Event::Return) {
-                // lock state because we're modifying sort_by wich is shared
-                // with updater thread
-                {
-                    std::lock_guard<std::mutex> lock(state_mutex);
-                    if (sort_selected == 0) {
-                        sort_by = SystemMonitor::SortBy::Cpu;
-                    } else if (sort_selected == 1) {
-                        sort_by = SystemMonitor::SortBy::Memory;
-                    }
-                    processes = monitor.get_processes(sort_by);
-                }
-                selected = 0;
-                show_sort_mode = false;
-                screen.PostEvent(Event::Custom);  // force redraw right away
-                return true;
-            } else if (event == Event::Escape) {
-                show_sort_mode = false;
-                return true;
-            }
-            return false;
-        }
+                SortBy new_sort =
+                    (sort_selected == 0) ? SortBy::Cpu : SortBy::Memory;
 
+                // only perform heavy updates when there's actual change
+                if (new_sort != sort_by) {
+                    std::lock_guard<std::mutex> lock(state_mutex);
+                    sort_by = new_sort;
+                    processes = monitor.get_processes(sort_by);
+                    screen.PostEvent(Event::Custom);  // force redraw
+                }
+                selected = 0;
+                show_sort_mode = false;
+                return true;
+            } else if (event == Event::Escape) {
+                show_sort_mode = false;
+                return true;
+            }
+            return false;
+        }
         // allow events only if no popup is shown
         if (!show_kill_confirm && !show_sort_mode) {
             // regular table events
