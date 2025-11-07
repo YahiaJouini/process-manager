@@ -49,16 +49,17 @@ Element Display::table_row(const Process& process, bool selected) {
     // color values based on usage
 
     if (process.cpu_usage > 50.0f) {
-        cpu_text = cpu_text | color(Color::Red);
+        cpu_text = cpu_text | color(Color::RedLight);
     } else if (process.cpu_usage > 20.0f) {
         cpu_text = cpu_text | color(Color::Yellow);
     } else {
         cpu_text = cpu_text | color(Color::Green);
     }
 
-    if (process.mem_usage > 1000.0f) {
-        mem_text = mem_text | color(Color::Red1);
-    } else if (process.mem_usage > 500.0f) {
+    // since mem_usage is in KB
+    if (process.mem_usage > 700'000) {
+        mem_text = mem_text | color(Color::RedLight);
+    } else if (process.mem_usage > 400'000) {
         mem_text = mem_text | color(Color::Yellow);
     } else {
         mem_text = mem_text | color(Color::Green);
