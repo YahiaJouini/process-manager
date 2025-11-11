@@ -7,7 +7,7 @@ It allows you to view, sort, and manage your running processes directly from the
 
 ## 🎥 Preview
 
-https://github.com/user-attachments/assets/b77d4698-a5c2-445e-9410-6e6616d54979
+https://github.com/user-attachments/assets/b7cf7133-7eac-411b-8b05-f9d9e48f280d
 
 ---
 

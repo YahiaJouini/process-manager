@@ -112,7 +112,7 @@ Element Display::kill_confirm_popup(const Process& process) {
 }
 
 Element Display::sort_popup(int sort_selected) {
-    std::vector<std::string> options = {"CPU Usage", "Memory Usage"};
+    std::vector<std::string> options = {" CPU Usage ", " Memory Usage "};
     Elements items;
     for (int i = 0; i < (int)options.size(); ++i) {
         bool selected_item = (i == sort_selected);
